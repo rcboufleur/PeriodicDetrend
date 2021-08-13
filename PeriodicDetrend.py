@@ -125,6 +125,7 @@ class DetrendLightCurve():
             self.name = kwargs['name']
         self.period_estimates = []
         self.period_err_estimates = []
+        self.period_differences = []
 
     
     ### WIDGETS CREATION #######################################################
@@ -352,7 +353,7 @@ class DetrendLightCurve():
         # dropdown lists
         self.interpolation_method_selection = widgets.Dropdown(
             options=[('Zero', 'zero'), ('Linear','slinear'), ('Quadratic','quadratic'), ('Cubic','cubic')],
-            value='cubic',
+            value='slinear',
             description='',
             layout=widgets.Layout(width='auto')
         )
@@ -619,12 +620,14 @@ class DetrendLightCurve():
 
         self.mask = np.logical_or(index_mask1, index_mask2, index_mask3)
 
-        index = np.asarray(index)
+#         index = np.asarray(index)
 
         if np.sum([self.mask1.value,self.mask2.value,self.mask3.value]) > 0:
+            self.optimize_period.value = False #d isables period optimization
+                                                # need to be better implemented in the future 
             index = []
             i = 0
-            while i < (len(self.t)-1):
+            while i < (len(self.t)-2):
                 if self.mask[i]:
                     index_start = i
                     while self.mask[i]:
@@ -677,7 +680,7 @@ class DetrendLightCurve():
                         self.f-self.trend,
                         self.period-0.025,
                         self.period+0.025,
-                        per_step=1/1440,
+                        per_step=1/5760,
                         window=self.window.value,
                         n_outliers=self.outlier.value,
                         n_threads=self.threads.value,
@@ -692,48 +695,50 @@ class DetrendLightCurve():
             out = mod.fit(y, pars, x=x)
             oldperiod = self.period
 
-            self.period = out.params['center'].value
+#             self.period = out.params['center'].value
+            self.period = plavchan_period[np.argmax(plavchan_stats)]
             self.period_err = out.params['fwhm'].value / 3.6013 # conversion of fwhm to sigma
             self.trend = self.interpolated_trend
             self.period_estimates.append(self.period)
             self.period_err_estimates.append(self.period_err)
+            self.period_differences.append(self.period - out.params['center'].value)
 
-            ### determine new maskvalues
-            phase_correction = (self.t[0]/oldperiod)-(self.t[0]/self.period)
+#             ### determine new maskvalues
+#             phase_correction = (self.t[0]/oldperiod)-(self.t[0]/self.period)
 
-            if np.sum([self.mask1.value,self.mask2.value,self.mask3.value]) > 0:
-                # ordenate maskvalues and put zeros at the end if necessary
-                maskvalues = np.concatenate([self.mask1.value,self.mask2.value,self.mask3.value])
-                idx = np.argsort(maskvalues)
-                maskvalues = maskvalues[idx]
-                if np.sum(maskvalues == 0) > 1:
-                    maskvalues = np.roll(maskvalues,np.sum(maskvalues>0))
-                print(maskvalues)
-                # correct the new phase values
-                NonZeroValues = (maskvalues > 0)
-                maskvalues[NonZeroValues] = maskvalues[NonZeroValues] - phase_correction        
-                # fix negative values
-                check_negatives = (maskvalues<0)
-                if np.sum(check_negatives) > 0:
-                    maskvalues[check_negatives] += 1
-                    if (np.sum(maskvalues == 0) == 2) and (np.sum(check_negatives) < 2):
-                        maskvalues[-1] = 1
-                # fix values over 1
-                check_over1 = (maskvalues>1)
-                if np.sum(check_over1) > 0:
-                    maskvalues[check_over1] -= 1
-                    # case of 3
-                    if (np.sum(maskvalues == 0) == 2) and (np.sum(check_over1) < 2):
-                        maskvalues[-1] = 1
+#             if np.sum([self.mask1.value,self.mask2.value,self.mask3.value]) > 0:
+#                 # ordenate maskvalues and put zeros at the end if necessary
+#                 maskvalues = np.concatenate([self.mask1.value,self.mask2.value,self.mask3.value])
+#                 idx = np.argsort(maskvalues)
+#                 maskvalues = maskvalues[idx]
+#                 if np.sum(maskvalues == 0) > 1:
+#                     maskvalues = np.roll(maskvalues,np.sum(maskvalues>0))
+#                 print(maskvalues)
+#                 # correct the new phase values
+#                 NonZeroValues = (maskvalues > 0)
+#                 maskvalues[NonZeroValues] = maskvalues[NonZeroValues] - phase_correction        
+#                 # fix negative values
+#                 check_negatives = (maskvalues<0)
+#                 if np.sum(check_negatives) > 0:
+#                     maskvalues[check_negatives] += 1
+#                     if (np.sum(maskvalues == 0) == 2) and (np.sum(check_negatives) < 2):
+#                         maskvalues[-1] = 1
+#                 # fix values over 1
+#                 check_over1 = (maskvalues>1)
+#                 if np.sum(check_over1) > 0:
+#                     maskvalues[check_over1] -= 1
+#                     # case of 3
+#                     if (np.sum(maskvalues == 0) == 2) and (np.sum(check_over1) < 2):
+#                         maskvalues[-1] = 1
 
-                # resort maskvalues
-                idx = np.argsort(maskvalues)
-                maskvalues = maskvalues[idx]
-                if np.sum(maskvalues == 0) > 1:
-                    maskvalues = np.roll(maskvalues,np.sum(maskvalues>0))
-                self.mask1.value = [maskvalues[0],maskvalues[1]]
-                self.mask2.value = [maskvalues[2],maskvalues[3]]
-                self.mask3.value = [maskvalues[4],maskvalues[4]]
+#                 # resort maskvalues
+#                 idx = np.argsort(maskvalues)
+#                 maskvalues = maskvalues[idx]
+#                 if np.sum(maskvalues == 0) > 1:
+#                     maskvalues = np.roll(maskvalues,np.sum(maskvalues>0))
+#                 self.mask1.value = [maskvalues[0],maskvalues[1]]
+#                 self.mask2.value = [maskvalues[2],maskvalues[3]]
+#                 self.mask3.value = [maskvalues[4],maskvalues[4]]
 
         self.solution = True
 
@@ -831,6 +836,9 @@ class DetrendLightCurve():
         self.reset_detrend.disabled=False
         self.reset_detrend.description='RESET'
         self.save_results.disabled=True
+        self.mask1.value=[0,0]
+        self.mask2.value=[0,0]
+        self.mask3.value=[0,0]
 
     def on_save_results_clicked(self, change):
         try:
@@ -854,6 +862,7 @@ class DetrendLightCurve():
         # reset estimates
         self.period_estimates = []
         self.period_err_estimates = []
+        self.period_differences = []
         
         if not self.optimize_period.value:
             self.number_of_runs.value = 1
@@ -873,7 +882,7 @@ class DetrendLightCurve():
                     self.detrend_log_out.append_stdout('Period estimate: {:.8f} +-{:.8f}\n'.format(self.period,self.period_err))
             else:
                 with self.detrend_log_out:
-                    self.detrend_log_out.append_stdout('Detrend executed without period optimization\n')
+                    self.detrend_log_out.append_stdout('Detrend executed without period optimization\n\n\n')
             
         # Replot folded light curve
         self.plot_folded_lightcurve.clear_output()
