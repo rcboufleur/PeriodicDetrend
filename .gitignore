@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# My testing files
+k2sc_235009762*.txt
+
 # Distribution / packaging
 .Python
 build/
