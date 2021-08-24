@@ -8,7 +8,7 @@ See example notebook for more details.
 - Ipywidgets
 - Numpy
 - Matplotlib
-- Multiprocessing
+- Multiprocess
 - Scipy
 - Lmfit
 - JupyterLab
