@@ -489,6 +489,38 @@ class DetrendLightCurve():
                 ax.set_xscale('linear')
 
     # GENERATE TAB3 (FOLDED PHASE) PLOT
+    def estimate_primary_transit_timing(self, phasevalue=False):
+        '''Shift primary transit'''
+        phase = (self.t/self.period) % 1
+        idx = np.argsort(phase)
+        mean_lc = mmean(phase[idx], self.f[idx], 0.01)
+        reference = phase[idx[np.argmin(mean_lc)]]
+        idx2 = (phase[idx] > (reference-0.1)) & (phase[idx] < (reference+0.1))
+
+        mod = GaussianModel()
+        x = phase[idx[idx2]]
+        y = 1/self.f[idx[idx2]] - min(1/self.f[idx[idx2]])
+        pars = mod.guess(y, x=x)
+        out = mod.fit(y, pars, x=x)
+        reference = out.params['center'].value
+        if phasevalue:
+            return reference
+        if reference > phase[0]:
+            return ( (reference - phase[0])*self.period + self.t[0] )
+        if reference <= phase[0]:
+            return ( (reference - phase[0] + 1)*self.period + self.t[0] )
+        
+    def shift_primary_transit_phase(self):
+        '''Shift primary transit to 0.25'''
+        defasage = 0.25 - self.estimate_primary_transit_timing(phasevalue=True)
+        phase = (self.t/self.period) % 1
+        phase2 = phase + defasage
+        idx = phase2 > 1
+        phase2[idx] = phase2[idx]-1
+        idx = phase2 < 0
+        phase2[idx] = phase2[idx]+1
+        return phase2
+
     def generate_plot_folded_lightcurve(self):
         self.fig_phase_folded, self.ax_phase_folded = plt.subplots(constrained_layout=True, figsize=(5,3.71))
         self.ax_phase_folded = plt.axes()
@@ -501,15 +533,13 @@ class DetrendLightCurve():
         self.fig_phase_folded.canvas.footer_visible = False
 
         if self.period > 0:
-            self.phase = (self.t/self.period) % 1
-            idx = np.argsort(self.phase)
-            mean_lc = mmean(self.phase[idx], self.f[idx], 0.01)
-            # plot folded light curve
+            self.phase = self.shift_primary_transit_phase()
             self.ax_phase_folded.plot(self.phase, self.f, '.', color='navy', alpha=0.75, label='Original')
         
         if self.solution:
-           # plot detrended light curve
-           self.ax_phase_folded.plot(self.phase, self.f - self.trend , '.', color='orangered', label='Detrended' )
+            # plot detrended light curve
+            self.phase = self.shift_primary_transit_phase()
+            self.ax_phase_folded.plot(self.phase, self.f - self.trend , '.', color='orangered', label='Detrended' )
        
         # averaged folded light curve
         # self.ax_phase_folded.plot(self.phase[idx], mean_lc, 'k-', alpha=0.5)
@@ -880,6 +910,10 @@ class DetrendLightCurve():
             if self.optimize_period.value:
                 with self.detrend_log_out:
                     self.detrend_log_out.append_stdout('Period estimate: {:.8f} +-{:.8f}\n'.format(self.period,self.period_err))
+                    if (self.number_of_runs.value - nrun < 2):
+                        self.detrend_log_out.append_stdout('          Primary transit epoch estimate: {:.8f}\n'.format(self.estimate_primary_transit_timing()))
+                        self.detrend_log_out.append_stdout('          Plot shifted by {:.5f} in phase.\n\n\n'.format(0.25-self.estimate_primary_transit_timing(phasevalue=True)))
+
             else:
                 with self.detrend_log_out:
                     self.detrend_log_out.append_stdout('Detrend executed without period optimization\n\n\n')
@@ -895,16 +929,17 @@ class DetrendLightCurve():
             self.generate_plot_detrend()
 
             
-        if self.number_of_runs.value > 1:
-            self.period = np.mean(self.period_estimates)
-            self.period_err = np.sqrt( np.mean(np.array(self.period_err_estimates)**2) + np.std(self.period_estimates, ddof=1)**2 )
+#         if self.number_of_runs.value > 1:
+#             self.period = np.mean(self.period_estimates)
+#             self.period_err = np.sqrt( np.mean(np.array(self.period_err_estimates)**2) + np.std(self.period_estimates, ddof=1)**2 )
             
-            if self.optimize_period.value:
-                with self.detrend_log_out:
-                    self.detrend_log_out.append_stdout('Period estimate from {} runs: {:.8f} +-{:.8f}\n\n\n'.format(self.number_of_runs.value,self.period, self.period_err))
-            else:
-                with self.detrend_log_out:
-                    self.detrend_log_out.append_stdout('Detrend executed without period optimization\n\n\n')
+#             if self.optimize_period.value:
+#                 with self.detrend_log_out:
+#                     self.detrend_log_out.append_stdout('Period estimate from {} runs: {:.8f} +-{:.8f}\n'.format(self.number_of_runs.value, self.period, self.period_err))
+#                     self.detrend_log_out.append_stdout('Primary transit epoch estimate: {:.8f}\n\n\n'.format(self.estimate_primary_transit_timing()))
+#             else:
+#                 with self.detrend_log_out:
+#                     self.detrend_log_out.append_stdout('Detrend executed without period optimization\n\n\n')
                     
         self.detrend_button.button_style='success'
         self.detrend_button.disabled=False
